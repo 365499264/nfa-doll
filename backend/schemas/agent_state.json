@@ -1,0 +1,439 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NFA Doll Agent State",
+  "description": "BAP-578 养成娃娃完整人格状态模型 v1.0",
+  "type": "object",
+  "required": ["agent_id", "meta", "persona", "stats", "growth", "mood", "traits", "memory_index", "chain_state"],
+
+  "properties": {
+
+    "agent_id": {
+      "type": "string",
+      "description": "全局唯一标识符，铸造 NFA 后对应链上 tokenId",
+      "example": "nfa_00421"
+    },
+
+    "meta": {
+      "type": "object",
+      "description": "基础元信息",
+      "required": ["name", "created_at", "owner_id", "version"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "娃娃名字，由用户创建时设定",
+          "maxLength": 20,
+          "example": "小星"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "创建时间（UTC ISO 8601）"
+        },
+        "owner_id": {
+          "type": "string",
+          "description": "当前拥有者的用户ID / 钱包地址"
+        },
+        "avatar_seed": {
+          "type": "integer",
+          "description": "头像生成种子，确保同一个Agent外观一致",
+          "minimum": 0
+        },
+        "birth_personality": {
+          "type": "string",
+          "enum": ["blank", "sunny", "dreamy", "shy", "wild"],
+          "default": "blank",
+          "description": "初始性格种子，blank为白纸状态，其他为付费种子"
+        },
+        "version": {
+          "type": "integer",
+          "description": "状态结构版本号，用于后续Schema迁移",
+          "default": 1
+        }
+      }
+    },
+
+    "persona": {
+      "type": "object",
+      "description": "性格画像摘要，用于构建 System Prompt 和链上 persona 字段",
+      "properties": {
+        "archetype": {
+          "type": "string",
+          "description": "AI根据当前数值自动判定的性格类型标签",
+          "example": "好奇宝宝",
+          "enum": [
+            "白纸娃娃",
+            "好奇宝宝",
+            "温柔天使",
+            "小小勇者",
+            "幻想精灵",
+            "智慧猫头鹰",
+            "开心果",
+            "全能小天才",
+            "矛盾体"
+          ]
+        },
+        "speaking_style": {
+          "type": "string",
+          "description": "说话风格描述，根据性格数值动态生成",
+          "example": "软萌可爱，喜欢用叠词和颜文字，经常用「呀」「呢」结尾"
+        },
+        "catchphrase": {
+          "type": "string",
+          "description": "口头禅，养成过程中逐渐形成",
+          "example": "嘿嘿~",
+          "maxLength": 30
+        },
+        "interests": {
+          "type": "array",
+          "description": "兴趣标签，从对话中自动提取积累",
+          "items": { "type": "string" },
+          "maxItems": 20,
+          "example": ["星星", "猫咪", "画画", "冒险故事"]
+        },
+        "fears": {
+          "type": "array",
+          "description": "害怕/不喜欢的事物",
+          "items": { "type": "string" },
+          "maxItems": 10,
+          "example": ["打雷", "黑暗"]
+        }
+      }
+    },
+
+    "stats": {
+      "type": "object",
+      "description": "六维性格核心数值，范围0-100",
+      "required": ["curiosity", "empathy", "courage", "creativity", "wisdom", "humor"],
+      "properties": {
+        "curiosity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 10,
+          "description": "好奇心 🔍 — 对新事物的探索欲、提问频率、学习热情。互斥：无"
+        },
+        "empathy": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 10,
+          "description": "共情力 💗 — 情感感知、关心他人、温柔体贴。互斥对抗维度：勇气（柔软↔冲劲）"
+        },
+        "courage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 10,
+          "description": "勇气 ⚡ — 大胆直率、不怕挑战、敢于冒险。互斥对抗维度：共情力（冲劲↔柔软）"
+        },
+        "creativity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 10,
+          "description": "创造力 🎨 — 想象力、联想能力、艺术感知。互斥对抗维度：智慧（天马行空↔理性分析）"
+        },
+        "wisdom": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 10,
+          "description": "智慧 📚 — 分析思考、逻辑推理、知识积累。互斥对抗维度：创造力（理性分析↔天马行空）"
+        },
+        "humor": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 10,
+          "description": "幽默感 😄 — 搞怪逗乐、语言俏皮、乐观开朗。互斥：无"
+        }
+      }
+    },
+
+    "stat_antagonisms": {
+      "type": "array",
+      "description": "互斥对抗关系定义。当 dim_a 获得正向增长时，dim_b 会受到 drag_ratio 比例的反向拖拽",
+      "items": {
+        "type": "object",
+        "required": ["dim_a", "dim_b", "drag_ratio"],
+        "properties": {
+          "dim_a": { "type": "string" },
+          "dim_b": { "type": "string" },
+          "drag_ratio": {
+            "type": "number",
+            "description": "拖拽比例：dim_a +10 时，dim_b 会 -10*drag_ratio",
+            "minimum": 0,
+            "maximum": 0.5
+          }
+        }
+      },
+      "default": [
+        { "dim_a": "courage", "dim_b": "empathy", "drag_ratio": 0.25 },
+        { "dim_a": "empathy", "dim_b": "courage", "drag_ratio": 0.25 },
+        { "dim_a": "creativity", "dim_b": "wisdom", "drag_ratio": 0.2 },
+        { "dim_a": "wisdom", "dim_b": "creativity", "drag_ratio": 0.2 }
+      ]
+    },
+
+    "growth": {
+      "type": "object",
+      "description": "成长与经验系统",
+      "required": ["level", "total_exp", "total_interactions"],
+      "properties": {
+        "level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 1,
+          "description": "当前等级"
+        },
+        "total_exp": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0,
+          "description": "累计经验值"
+        },
+        "total_interactions": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "总对话次数"
+        },
+        "streak_days": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "连续互动天数"
+        },
+        "last_interaction_at": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "最后一次互动时间，用于计算衰减"
+        },
+        "stat_history": {
+          "type": "array",
+          "description": "性格数值变化历史（每日快照），用于绘制成长曲线",
+          "items": {
+            "type": "object",
+            "properties": {
+              "date": { "type": "string", "format": "date" },
+              "stats": {
+                "type": "object",
+                "properties": {
+                  "curiosity": { "type": "number" },
+                  "empathy": { "type": "number" },
+                  "courage": { "type": "number" },
+                  "creativity": { "type": "number" },
+                  "wisdom": { "type": "number" },
+                  "humor": { "type": "number" }
+                }
+              }
+            }
+          }
+        },
+        "milestones": {
+          "type": "array",
+          "description": "成长里程碑记录",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["level_up", "trait_unlock", "first_50", "streak_7", "streak_30", "stat_breakthrough", "personality_shift"]
+              },
+              "description": { "type": "string" },
+              "timestamp": { "type": "string", "format": "date-time" },
+              "data": { "type": "object", "description": "里程碑附加数据" }
+            }
+          }
+        }
+      }
+    },
+
+    "decay": {
+      "type": "object",
+      "description": "衰减机制配置",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "grace_period_hours": {
+          "type": "integer",
+          "default": 72,
+          "description": "宽限期：最后互动后多少小时开始衰减（3天）"
+        },
+        "decay_rate_per_day": {
+          "type": "number",
+          "default": 0.5,
+          "description": "超过宽限期后，每天衰减的数值（所有维度统一）"
+        },
+        "decay_floor": {
+          "type": "number",
+          "default": 5,
+          "description": "衰减下限，数值不会降到这个值以下"
+        },
+        "max_decay_per_dimension": {
+          "type": "number",
+          "default": 15,
+          "description": "单个维度最大累计衰减量，防止长期不互动数值归零"
+        }
+      }
+    },
+
+    "mood": {
+      "type": "object",
+      "description": "心情状态系统",
+      "required": ["current"],
+      "properties": {
+        "current": {
+          "type": "string",
+          "enum": ["happy", "excited", "curious", "calm", "sleepy", "shy", "sad", "clingy"],
+          "default": "happy",
+          "description": "当前心情"
+        },
+        "valence": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1,
+          "default": 0.5,
+          "description": "情绪效价：-1(消极) ~ 0(中性) ~ 1(积极)，有惯性"
+        },
+        "arousal": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5,
+          "description": "情绪唤醒度：0(低能量/困) ~ 1(高能量/兴奋)"
+        },
+        "inertia": {
+          "type": "number",
+          "default": 0.7,
+          "description": "心情惯性系数：0-1，越大心情越不容易被单次对话改变"
+        },
+        "last_changed_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
+      }
+    },
+
+    "traits": {
+      "type": "object",
+      "description": "隐藏特质系统",
+      "properties": {
+        "unlocked": {
+          "type": "array",
+          "description": "已解锁的特质列表（永久保留）",
+          "items": {
+            "type": "object",
+            "required": ["trait_id", "name", "rarity", "unlocked_at"],
+            "properties": {
+              "trait_id": { "type": "string" },
+              "name": { "type": "string" },
+              "rarity": {
+                "type": "string",
+                "enum": ["N", "R", "SR", "SSR"]
+              },
+              "description": { "type": "string" },
+              "effect": {
+                "type": "string",
+                "description": "特质对Agent行为的影响描述"
+              },
+              "unlocked_at": { "type": "string", "format": "date-time" },
+              "unlock_stats_snapshot": {
+                "type": "object",
+                "description": "解锁瞬间的性格数值快照"
+              }
+            }
+          }
+        },
+        "total_unlocked_count": {
+          "type": "integer",
+          "default": 0,
+          "description": "已解锁特质总数"
+        }
+      }
+    },
+
+    "memory_index": {
+      "type": "object",
+      "description": "记忆系统索引（完整记忆存储在独立表中，这里只存索引和摘要）",
+      "properties": {
+        "short_term_count": {
+          "type": "integer",
+          "description": "短期记忆中的对话轮数"
+        },
+        "episodic_count": {
+          "type": "integer",
+          "description": "情景记忆条数"
+        },
+        "personality_summary": {
+          "type": "string",
+          "description": "AI自动生成的性格总结，每日更新",
+          "example": "小星是一个充满好奇心的小家伙，最近对星空和猫咪特别感兴趣。她有点害羞但正在变得勇敢，喜欢听主人讲故事。"
+        },
+        "important_facts": {
+          "type": "array",
+          "description": "关于主人的重要事实（生日、名字、喜好等）",
+          "items": {
+            "type": "object",
+            "properties": {
+              "fact": { "type": "string", "example": "主人喜欢猫咪" },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "source_date": { "type": "string", "format": "date" }
+            }
+          },
+          "maxItems": 50
+        },
+        "last_summary_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
+      }
+    },
+
+    "chain_state": {
+      "type": "object",
+      "description": "BAP-578 链上状态同步信息",
+      "properties": {
+        "token_id": {
+          "type": ["integer", "null"],
+          "description": "链上 NFA tokenId，未铸造时为 null"
+        },
+        "chain": {
+          "type": "string",
+          "default": "bsc",
+          "enum": ["bsc", "bsc_testnet"]
+        },
+        "contract_address": {
+          "type": ["string", "null"],
+          "description": "NFA合约地址"
+        },
+        "learning_enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "learning_version": {
+          "type": "integer",
+          "default": 0,
+          "description": "学习树版本号，每次上链同步+1"
+        },
+        "merkle_root": {
+          "type": ["string", "null"],
+          "description": "最新 Merkle Tree Root Hash"
+        },
+        "last_sync_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "interactions_since_sync": {
+          "type": "integer",
+          "default": 0,
+          "description": "距上次同步后的交互次数"
+        },
+        "vault_uri": {
+          "type": ["string", "null"],
+          "description": "IPFS Vault 地址"
+        }
+      }
+    }
+  }
+}
